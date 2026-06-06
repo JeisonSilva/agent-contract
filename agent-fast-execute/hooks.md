@@ -11,16 +11,16 @@ hooks:
   pre_run:
     description: Executado antes do início de cada ciclo de execução.
     use_cases:
-      - Validar conectividade com sistemas externos
-      - Carregar contexto persistido
-      - Inicializar contadores e métricas
+      - <descreva o uso 1>
+      - <descreva o uso 2>
+      - <descreva o uso 3>
 
   post_run:
     description: Executado após a conclusão de cada ciclo.
     use_cases:
-      - Persistir memória de curto prazo
-      - Emitir métricas e logs estruturados
-      - Notificar sistemas downstream
+      - <descreva o uso 1>
+      - <descreva o uso 2>
+      - <descreva o uso 3>
 
   on_tool_call:
     description: Disparado imediatamente antes de qualquer chamada de ferramenta.
@@ -58,14 +58,15 @@ Cada hook deve:
 3. Receber o **contexto completo** do ciclo atual como argumento.
 4. **Nunca modificar** o estado do agente diretamente; use o canal de eventos.
 
-## Example Payload
+## Event Payload Schema
 
 ```json
 {
-  "hook": "on_tool_call",
-  "timestamp": "2026-06-06T14:41:00Z",
-  "cycle_id": "cycle-042",
-  "tool_name": "fetch_metrics",
-  "parameters": { "service": "api-gateway", "window": "5m" }
+  "hook": "<nome-do-hook>",
+  "timestamp": "<ISO-8601>",
+  "cycle_id": "<cycle-id>",
+  "<dados-adicionais>": "..."
 }
 ```
+
+> Adicione campos ao payload conforme as necessidades do seu domínio.
