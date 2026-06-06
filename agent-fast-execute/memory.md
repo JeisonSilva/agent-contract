@@ -10,7 +10,7 @@ A memória do agente é dividida em camadas com escopos e durabilidades distinta
 memory:
   short_term:
     type: sliding_window
-    max_tokens: <defina o limite>       # ex: 8192
+    max_tokens: 8192
     ttl: session                        # descartado ao fim do ciclo
     description: >
       Janela de contexto ativo. Contém as últimas N mensagens,

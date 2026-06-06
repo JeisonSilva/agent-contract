@@ -14,15 +14,34 @@ const RETRYABLE = new Set([ERROR_CODES.TIMEOUT, ERROR_CODES.RATE_LIMIT]);
 
 const registry = new Map();
 
-export function registerTool(definition) {
-  if (!definition.name) throw new Error('Tool registration requires a name.');
-  if (typeof definition.execute !== 'function') throw new Error(`Tool '${definition.name}' requires an execute function.`);
-
+// Pre-register a tool schema from toolbox.md (no execute required yet)
+export function registerToolSchema(definition) {
+  if (!definition.name) throw new Error('Tool schema requires a name.');
+  const existing = registry.get(definition.name) ?? {};
   registry.set(definition.name, {
     timeout: 30_000,
     requires_confirmation: false,
     inputs: { type: 'object', properties: {}, required: [] },
+    ...existing,
     ...definition,
+    execute: existing.execute ?? (async () => {
+      throw new Error(`Tool '${definition.name}': no execute function registered.`);
+    }),
+  });
+}
+
+// Register a tool with an execute function; merges with any pre-loaded schema
+export function registerTool(definition) {
+  if (!definition.name) throw new Error('Tool registration requires a name.');
+  if (typeof definition.execute !== 'function') throw new Error(`Tool '${definition.name}' requires an execute function.`);
+
+  const existing = registry.get(definition.name) ?? {};
+  registry.set(definition.name, {
+    timeout: 30_000,
+    requires_confirmation: false,
+    inputs: { type: 'object', properties: {}, required: [] },
+    ...existing,   // schema pre-loaded from toolbox.md
+    ...definition, // execute + any overrides
   });
 }
 

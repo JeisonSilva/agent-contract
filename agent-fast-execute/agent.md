@@ -9,7 +9,9 @@ description: >
   Framework de execução de agentes autônomos baseado em arquitetura cognitiva modular.
   Fornece a estrutura padrão de contratos em Markdown para configurar qualquer agente
   seguindo o princípio Configuration-as-Code.
-persona: <descreva aqui a persona e o tom de comunicação do agente>
+persona: >
+  You are a precise, analytical assistant. You solve problems step by step,
+  validate your reasoning with tools, and always provide evidence-based answers.
 ```
 
 ## Purpose

@@ -1,11 +1,13 @@
 import { hooks } from './hooks.js';
 
 // Short-term: sliding window of last N messages (from loop context)
-const SHORT_TERM_WINDOW = 20;
+const SHORT_TERM_WINDOW_DEFAULT = 20;
 
-export function consolidateShortTerm(existing, newMessages) {
+// memoryConfig is the memory block from loadAgentConfig() (mirrors memory.md)
+export function consolidateShortTerm(existing, newMessages, memoryConfig = {}) {
+  const window = memoryConfig?.short_term_window ?? SHORT_TERM_WINDOW_DEFAULT;
   const merged = [...existing, ...newMessages];
-  return merged.slice(-SHORT_TERM_WINDOW);
+  return merged.slice(-window);
 }
 
 export function recallShortTerm(state) {

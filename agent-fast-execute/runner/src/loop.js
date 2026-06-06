@@ -55,9 +55,10 @@ export async function thinkNode(state, config) {
   const llm = config.configurable?.llm;
   if (!llm) throw new Error('LLM not configured. Pass { configurable: { llm } } to agent.invoke().');
 
-  const strategy = selectStrategy(state.task, state.config);
+  const agentConfig = config.configurable?.agentConfig ?? {};
+  const strategy = selectStrategy(state.task, state.config, agentConfig);
   const tools = listTools();
-  const systemPrompt = buildSystemPrompt(strategy, tools);
+  const systemPrompt = buildSystemPrompt(strategy, tools, agentConfig);
 
   // Build the conversation for this call
   let callMessages = [...state.messages];
@@ -125,12 +126,13 @@ export async function actNode(state) {
 
 // ── Node: consolidate ─────────────────────────────────────────────────────────
 // Updates memory layers and fires post_run hook
-export async function consolidateNode(state) {
+export async function consolidateNode(state, config) {
   const t0 = Date.now();
+  const agentConfig = config?.configurable?.agentConfig ?? {};
 
   // Persist conversation to short-term sliding window
   const serialized = serializeMessages(state.messages);
-  const updated_short_term = consolidateShortTerm(state.short_term, serialized);
+  const updated_short_term = consolidateShortTerm(state.short_term, serialized, agentConfig.memory);
 
   // Append cycle summary to episodic log
   const episodic_entry = buildEpisodicEntry(state, {
