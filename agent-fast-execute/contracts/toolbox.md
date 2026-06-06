@@ -30,54 +30,47 @@ requires_confirmation: <true | false> # para ações destrutivas
 
 ## Tool Registry
 
-> Substitua as ferramentas de exemplo abaixo pelas ferramentas reais do seu agente.
-> Agrupe-as por categoria de responsabilidade.
+### Categoria: `math`
 
-### Categoria 1: `<nome da categoria>`
+#### `calculator`
 
-#### `<nome-da-ferramenta>`
-
-<Descrição breve da ferramenta>
+Avalia uma expressão aritmética e retorna o resultado numérico.
 
 ```yaml
-tool: <nome>
-description: <descrição>
+tool: calculator
+description: Evaluate a safe arithmetic expression and return the numeric result.
 inputs:
-  input_1:
+  expression:
     type: string
     required: true
-    description: <descrição>
-  input_2:
-    type: string
-    required: false
-    default: <padrão>
+    description: "Arithmetic expression, e.g. \"42 * 37\""
 outputs:
-  type: <TipoDeRetorno>
+  type: CalculatorResult
   schema:
-    field_1: string
-    field_2: integer
+    expression: string
+    result: number
 timeout: 10s
 ```
 
-### Categoria 2: `<nome da categoria>`
+#### `is_prime`
 
-#### `<nome-da-ferramenta>`
-
-<Descrição breve da ferramenta>
+Verifica se um número inteiro é primo.
 
 ```yaml
-tool: <nome>
-description: <descrição>
+tool: is_prime
+description: Check whether a given integer is a prime number.
 inputs:
-  input_1:
-    type: string
+  n:
+    type: integer
     required: true
+    description: The integer to check
 outputs:
-  type: <TipoDeRetorno>
+  type: PrimeResult
   schema:
-    result: string
-timeout: 15s
-requires_confirmation: true
+    n: integer
+    is_prime: boolean
+    factor: integer
+timeout: 5s
 ```
 
 ## Tool Governance

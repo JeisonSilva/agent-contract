@@ -1,6 +1,7 @@
 import { callTool, createToolError, ERROR_CODES } from './toolbox.js';
 import { hooks } from './hooks.js';
 
+// Defaults — overridden at runtime by executorConfig from contracts/executor.md
 const MAX_RETRIES = 3;
 const BACKOFF_BASE_MS = 2_000;
 const STEP_TIMEOUT_MS = 30_000;
@@ -19,10 +20,12 @@ export const STEP_STATUS = {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function executeStep(step, context, signal) {
+async function executeStep(step, context, signal, cfg = {}) {
+  const maxRetries   = cfg.max_retries      ?? MAX_RETRIES;
+  const stepTimeout  = cfg.timeout_per_step ?? STEP_TIMEOUT_MS;
   let attempt = 0;
 
-  while (attempt <= MAX_RETRIES) {
+  while (attempt <= maxRetries) {
     if (signal.aborted) {
       return { ...step, status: STEP_STATUS.ABORTED, error: 'Execution aborted by total timeout' };
     }
@@ -32,8 +35,8 @@ async function executeStep(step, context, signal) {
         callTool(step.tool, step.inputs, context),
         new Promise((_, reject) =>
           setTimeout(
-            () => reject(createToolError(ERROR_CODES.TIMEOUT, `Step '${step.id}' exceeded ${STEP_TIMEOUT_MS}ms`, true)),
-            STEP_TIMEOUT_MS
+            () => reject(createToolError(ERROR_CODES.TIMEOUT, `Step '${step.id}' exceeded ${stepTimeout}ms`, true)),
+            stepTimeout
           )
         ),
       ]);
@@ -50,8 +53,8 @@ async function executeStep(step, context, signal) {
         retryable,
       });
 
-      if (!retryable || attempt >= MAX_RETRIES) {
-        const status = attempt >= MAX_RETRIES ? STEP_STATUS.EXHAUSTED : STEP_STATUS.FAILED;
+      if (!retryable || attempt >= maxRetries) {
+        const status = attempt >= maxRetries ? STEP_STATUS.EXHAUSTED : STEP_STATUS.FAILED;
         if (step.on_error === 'abort') {
           return { ...step, status: STEP_STATUS.ABORTED, error: err.message, attempts: attempt + 1 };
         }
@@ -66,14 +69,16 @@ async function executeStep(step, context, signal) {
 }
 
 // Execute a declarative plan produced by the planner (sequential, with dependency resolution)
-export async function executePlan(plan, context = {}) {
+// executorConfig mirrors the contracts/executor.md YAML block
+export async function executePlan(plan, context = {}, executorConfig = {}) {
+  const totalTimeout = executorConfig.timeout_total ?? TOTAL_TIMEOUT_MS;
   const started_at = Date.now();
   const stepOutputs = new Map();
   const stepStatuses = {};
   const controller = new AbortController();
   const results = [];
 
-  const totalTimer = setTimeout(() => controller.abort(), TOTAL_TIMEOUT_MS);
+  const totalTimer = setTimeout(() => controller.abort(), totalTimeout);
 
   for (const step of plan.steps) {
     if (controller.signal.aborted) {
@@ -100,7 +105,7 @@ export async function executePlan(plan, context = {}) {
       ),
     };
 
-    const result = await executeStep(step, stepContext, controller.signal);
+    const result = await executeStep(step, stepContext, controller.signal, executorConfig);
     stepOutputs.set(step.id, result.outputs);
     stepStatuses[step.id] = result.status;
     results.push(result);
