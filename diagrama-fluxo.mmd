@@ -1,0 +1,62 @@
+flowchart TD
+    Start([Início: Program.execute]) --> CarregaAgent[Carregar Agent\nAGENTS.md + skills.md + roles.md]
+    CarregaAgent --> CarregaContratos[ProcessoCognitivo carrega contratos\nloop.md / planner.md / executor.md / toolbox.md / hooks.md]
+    CarregaContratos --> Loop[Loop monta StateGraph\na partir de loop.ciclo]
+
+    Loop --> Inicio[["Etapa: inicio"]]
+
+    subgraph HooksInicio [Hooks de início]
+        direction TB
+        H1[preparar-analise-do-projeto\nconfirma acesso e limpa estado]
+        H2[validar-presenca-de-manifesto\nprocura package.json / pom.xml / requirements.txt]
+        H3[validar-janela-de-commits\nconfirma janela de 3 meses]
+        H1 --> H2 --> H3
+    end
+
+    Inicio --> HooksInicio
+    HooksInicio --> ManifestoOK{Manifesto\nencontrado?}
+
+    ManifestoOK -- Não --> Interrompido[interrompido = true\nciclo segue em modo early-exit]
+    ManifestoOK -- Sim --> Planejar[["Etapa: planejar"]]
+
+    Planejar --> PlannerLLM[Planner monta prompt\ncom objetivo + ferramentas do toolbox\ne consulta o Modelo de IA]
+    PlannerLLM --> Plano["Plano JSON: lista ordenada de etapas\n(descricao, acao, criterio_de_sucesso, depende_de)"]
+
+    Plano --> Executar[["Etapa: executar_proxima_etapa"]]
+    Interrompido -.-> Executar
+
+    subgraph ExecucaoEtapas [Para cada etapa do plano]
+        direction TB
+        E1[Executor localiza ferramenta\nno Toolbox pelo nome da acao]
+        E2{Ferramenta\ncatalogada e\nimplementada?}
+        E3[Executa a ferramenta\ncom contexto + resultados anteriores]
+        E4[Acumula resultado em\nresultadosPorFerramenta]
+        E5[Registra falha\ne observações]
+        E1 --> E2
+        E2 -- Sim --> E3 --> E4
+        E2 -- Não --> E5
+    end
+
+    Executar --> ExecucaoEtapas
+    ExecucaoEtapas --> Validar[["Etapa: validar_resultado"]]
+
+    Validar --> TemFalha{Alguma etapa\nfalhou?}
+    TemFalha -- Não --> Concluido[concluido = true]
+    TemFalha -- Sim --> ComFalhas[concluido = false\nregistra quantidade de falhas]
+
+    Concluido --> Finalizar[["Etapa: repetir_ou_finalizar"]]
+    ComFalhas --> Finalizar
+
+    subgraph HooksFim [Hooks de fim]
+        direction TB
+        F1[consolidar-relatorio-de-catalogacao\nmonta relatorio: dominio, subdominios,\ndesenvolvedores e associacoes]
+        F2[registrar-log-de-execucao\ngrava resultados/log_timestamp_status.md]
+        F1 --> F2
+    end
+
+    Finalizar --> HooksFim
+    HooksFim --> Resposta([Relatório final exibido\ne devolvido ao usuário])
+
+    style Interrompido fill:#f8d7da,stroke:#dc3545
+    style Concluido fill:#d4edda,stroke:#28a745
+    style ComFalhas fill:#fff3cd,stroke:#ffc107
