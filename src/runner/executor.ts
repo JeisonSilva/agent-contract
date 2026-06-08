@@ -1,5 +1,5 @@
 import type { EtapaPlano } from "./planner.js";
-import type { ImplementacaoDeFerramenta } from "./ferramentas.js";
+import type { ImplementacaoDeFerramenta } from "../agente/ferramentas.js";
 
 export type ResultadoEtapa = {
     status: "sucesso" | "falha";

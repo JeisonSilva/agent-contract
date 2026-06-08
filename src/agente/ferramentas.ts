@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import type { ContextoDeExecucao } from "./executor.js";
+import type { ContextoDeExecucao } from "../runner/executor.js";
 import type ModeloIA from "../agents-config/modeloIA.js";
 
 export type Pacote = { nome: string; versao: string };
