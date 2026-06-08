@@ -7,7 +7,12 @@ class Program{
         const agent = Agent.CarregarAgent();
         const processadorCognitivo = ProcessoCognitivo.CarregarProcessadorCognitivo(agent);
 
-        await processadorCognitivo.execute();
+        const entrada = {
+            objetivo: agent.objetivo,
+            caminhoDoProjeto: process.argv[2] ?? process.cwd(),
+        };
+
+        await processadorCognitivo.execute(entrada);
 
     }
 }

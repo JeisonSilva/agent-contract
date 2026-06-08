@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import { ChatOpenAI } from "@langchain/openai";
-import { SystemMessage } from "@langchain/core/messages";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 export default class ModeloIA {
     
@@ -28,5 +28,16 @@ export default class ModeloIA {
 
     addSystemMessage(descricao: string) {
         this._systemPrompt = new SystemMessage(descricao);
+    }
+
+    async perguntar(prompt: string): Promise<string> {
+        const mensagens = this._systemPrompt
+            ? [this._systemPrompt, new HumanMessage(prompt)]
+            : [new HumanMessage(prompt)];
+
+        const resposta = await this.model.invoke(mensagens);
+        return typeof resposta.content === "string"
+            ? resposta.content
+            : JSON.stringify(resposta.content);
     }
 }

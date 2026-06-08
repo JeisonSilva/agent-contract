@@ -11,6 +11,17 @@ export default class Agent{
     private _skillsRoot: any;
     private _rolesRoot: any;
     
+    // O agente é especializado em um único propósito: sua `descricao` no
+    // AGENTS.md já é a meta a perseguir, então ela serve como `objetivo` de
+    // entrada do planner sem exigirmos que o usuário a redigite a cada execução.
+    get objetivo(): string {
+        return this._agentRoot?.agente?.descricao ?? "";
+    }
+
+    get nome(): string {
+        return this._agentRoot?.agente?.nome ?? "";
+    }
+
     static CarregarAgent(): Agent{
         const agent = new Agent();
         agent

@@ -3,20 +3,23 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
-import Loop from "./loop.js";
+import Loop, { type EntradaCiclo } from "./loop.js";
 import Planner from "./planner.js";
 import Executor from "./executor.js";
+import ModeloIA from "../agents-config/modeloIA.js";
 import { criarHandlersDoCiclo } from "./cicloHandlers.js";
+import { criarFerramentas } from "./ferramentas.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export default class ProcessoCognitivo {    
+export default class ProcessoCognitivo {
     private _executorRoot: any;
     private _plannerRoot: any;
     private _loopRoot: any;
     private _toolboxRoot: any;
+    private _hooksRoot: any;
     private _agent: Agent;
-    
+
 
     constructor(agent: Agent) {
         this._agent = agent;
@@ -30,6 +33,7 @@ export default class ProcessoCognitivo {
           .addLoop()
           .addPlanner()
           .addToolBox()
+          .addHooks()
 
 
         return processadorCognitivo;
@@ -79,6 +83,21 @@ export default class ProcessoCognitivo {
         return this;
     }
 
+    private addHooks(): ProcessoCognitivo {
+        const caminhoHooks = path.join(__dirname, '../../agents/hooks.md');
+        const arquivoYaml = fs.readFileSync(caminhoHooks, 'utf8')
+        const match = arquivoYaml.match(/```yaml([\s\S]*?)```/);
+        const textoYaml = match?.[1];
+
+        if(textoYaml){
+            this._hooksRoot = yaml.load(textoYaml) as any;
+        } else {
+            console.log("Nenhum bloco YAML encontrado.");
+        }
+
+        return this;
+    }
+
     private addExecutor(): ProcessoCognitivo {
         const caminhoExecutor = path.join(__dirname, '../../agents/contracts/executor.md');
         const arquivoYaml = fs.readFileSync(caminhoExecutor, 'utf8')
@@ -94,12 +113,15 @@ export default class ProcessoCognitivo {
         return this;
     }
 
-    async execute() {
-        const loop = new Loop(this._loopRoot, criarHandlersDoCiclo());
-        const planner = new Planner(this._plannerRoot);
-        const executor = new Executor(this._executorRoot, this._toolboxRoot);
-        
-        await loop.execute(planner, executor, this._agent);
+    async execute(entrada: EntradaCiclo) {
+        const modeloIA = ModeloIA.configurarModeloIA();
+        const ferramentas = criarFerramentas(modeloIA);
+
+        const loop = new Loop(this._loopRoot, criarHandlersDoCiclo(ferramentas, this._hooksRoot));
+        const planner = new Planner(this._plannerRoot, modeloIA);
+        const executor = new Executor(this._executorRoot, this._toolboxRoot, ferramentas);
+
+        await loop.execute(planner, executor, this._agent, entrada);
     }
 
 }

@@ -25,11 +25,11 @@ toolbox:
         - caminho_do_projeto: string
       retorno: Lista de pacotes/dependências encontrados, com nome e versão
 
-    - nome: classificar_area_por_pacotes
-      descricao: Recebe a lista de pacotes do projeto e classifica a(s) área(s) de atuação predominante(s) (ex. frontend, backend, mobile, dados, infraestrutura)
+    - nome: identificar_dominio_do_projeto
+      descricao: Analisa a documentação (README), descrição/palavras-chave do manifesto e a estrutura de pastas/módulos do projeto para identificar o domínio de negócio do produto e seus subdomínios (ex. domínio "Financeiro" com subdomínios "Investimentos", "Câmbio", "Pagamentos")
       parametros:
-        - pacotes: string[]
-      retorno: Uma ou mais áreas de atuação, com a justificativa baseada nos pacotes que sustentam cada classificação
+        - caminho_do_projeto: string
+      retorno: Domínio de negócio do projeto e lista de subdomínios do produto, cada um com justificativa e, quando identificáveis pela estrutura de pastas, os módulos/diretórios relacionados
 
     - nome: listar_commits_por_periodo
       descricao: Retorna os commits do repositório dentro de uma janela de datas
@@ -46,7 +46,7 @@ toolbox:
       retorno: Lista de desenvolvedores ativos, com nome/identificação e quantidade de commits no período
 
     - nome: listar_arquivos_alterados_por_autor
-      descricao: Recebe um desenvolvedor e a lista de commits do período, e retorna os arquivos/pacotes que esse desenvolvedor alterou (usado para associá-lo à(s) área(s) de atuação)
+      descricao: Recebe um desenvolvedor e a lista de commits do período, e retorna os arquivos/pacotes que esse desenvolvedor alterou (usado para associá-lo a(os) subdomínio(s) do produto)
       parametros:
         - autor: string
         - commits: object[]

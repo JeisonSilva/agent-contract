@@ -1,6 +1,8 @@
 import type Agent from "../agents-config/agent.js";
 import type Executor from "./executor.js";
+import type { ResultadoEtapa } from "./executor.js";
 import type Planner from "./planner.js";
+import type { EtapaPlano } from "./planner.js";
 import { Annotation, START, END, StateGraph } from "@langchain/langgraph";
 
 const state = Annotation.Root({
@@ -12,18 +14,39 @@ const state = Annotation.Root({
         default: () => false,
         reducer: (_, val) => val === true
     }),
+    // Marcado por um hook de início (ex: ausência de manifesto) para que os
+    // demais nós façam early-exit num grafo linear, sem precisar de ciclos
+    // ou arestas condicionais.
+    interrompido: Annotation<boolean>({
+        default: () => false,
+        reducer: (_, val) => val === true
+    }),
     interacoes: Annotation<number>({
         default: () => 0,
         reducer: (acc) => acc + 1
+    }),
+    plano: Annotation<EtapaPlano[]>({
+        default: () => [],
+        reducer: (_, val) => val
+    }),
+    resultados: Annotation<Array<{ etapa: EtapaPlano; resultado: ResultadoEtapa }>>({
+        default: () => [],
+        reducer: (_, val) => val
     }),
 });
 
 type EstadoCiclo = typeof state.State;
 
+export type EntradaCiclo = {
+    objetivo: string;
+    caminhoDoProjeto: string;
+};
+
 export type ContextoCiclo = {
     planner: Planner;
     executor: Executor;
     agent: Agent;
+    entrada: EntradaCiclo;
 };
 
 export type EtapaHandler = (
@@ -50,8 +73,8 @@ export default class Loop {
         return this;
     }
 
-    async execute(planner: Planner, executor: Executor, agent: Agent) {
-        const contexto: ContextoCiclo = { planner, executor, agent };
+    async execute(planner: Planner, executor: Executor, agent: Agent, entrada: EntradaCiclo) {
+        const contexto: ContextoCiclo = { planner, executor, agent, entrada };
         const etapas: string[] = this._loopRoot?.loop?.ciclo ?? [];
 
         if (etapas.length === 0) {
