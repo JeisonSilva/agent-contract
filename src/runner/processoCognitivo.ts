@@ -8,7 +8,8 @@ import Planner from "./planner.js";
 import Executor from "./executor.js";
 import ModeloIA from "../agents-config/modeloIA.js";
 import { criarHandlersDoCiclo } from "./cicloHandlers.js";
-import { criarFerramentas } from "./ferramentas.js";
+import { criarFerramentas } from "../agente/ferramentas.js";
+import { criarImplementacoesDeHooks, montarRelatorioFinal } from "../agente/hooks.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -116,8 +117,9 @@ export default class ProcessoCognitivo {
     async execute(entrada: EntradaCiclo) {
         const modeloIA = ModeloIA.configurarModeloIA();
         const ferramentas = criarFerramentas(modeloIA);
+        const implementacoesDeHooks = criarImplementacoesDeHooks();
 
-        const loop = new Loop(this._loopRoot, criarHandlersDoCiclo(ferramentas, this._hooksRoot));
+        const loop = new Loop(this._loopRoot, criarHandlersDoCiclo(ferramentas, this._hooksRoot, implementacoesDeHooks, montarRelatorioFinal));
         const planner = new Planner(this._plannerRoot, modeloIA);
         const executor = new Executor(this._executorRoot, this._toolboxRoot, ferramentas);
 
