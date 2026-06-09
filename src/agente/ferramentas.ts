@@ -3,6 +3,10 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import type { ContextoDeExecucao } from "../runner/executor.js";
 import type ModeloIA from "../agents-config/modeloIA.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 
 export type Pacote = { nome: string; versao: string };
 export type Manifesto = { arquivo: string; tipo: "npm" | "maven" | "pip"; caminhoCompleto: string };
@@ -283,7 +287,196 @@ async function listarArquivosAlteradosPorAutor(contexto: ContextoDeExecucao) {
     return { arquivos_por_desenvolvedor: arquivosPorDesenvolvedor };
 }
 
-export type ImplementacaoDeFerramenta = (contexto: ContextoDeExecucao) => Promise<any>;
+export type ImplementacaoDeFerramenta = (contexto: ContextoDeExecucao) => Promise<unknown>;
+
+export type ConfiguracaoDeApi = {
+    url: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+};
+
+function resolverVariaveisDeAmbiente(texto: string): string {
+    return texto.replace(/\$\{(\w+)\}/g, (_, nome: string) => process.env[nome] ?? "");
+}
+
+/**
+ * Cria uma implementação de ferramenta que chama um endpoint HTTP.
+ *
+ * Valores como `${MINHA_VAR}` na url e nos headers são substituídos por
+ * variáveis de ambiente em tempo de execução, permitindo manter tokens
+ * e segredos fora do contrato YAML.
+ *
+ * Para declarar a ferramenta no toolbox basta adicionar o campo `api_config`:
+ *
+ * ```yaml
+ * - nome: buscar_usuarios
+ *   descricao: Retorna lista de usuários da API de gestão
+ *   api_config:
+ *     url: https://api.exemplo.com/usuarios
+ *     method: GET
+ *     headers:
+ *       Authorization: "Bearer ${API_TOKEN}"
+ *       Accept: application/json
+ * ```
+ *
+ * O runner detecta `api_config` automaticamente e wires a implementação —
+ * nenhuma linha de TypeScript precisa ser adicionada.
+ */
+export function criarChamadorDeApi(config: ConfiguracaoDeApi): ImplementacaoDeFerramenta {
+    return async (_contexto: ContextoDeExecucao) => {
+        const url = resolverVariaveisDeAmbiente(config.url);
+        const method = (config.method ?? "GET").toUpperCase();
+
+        const headers: Record<string, string> = {};
+        for (const [chave, valor] of Object.entries(config.headers ?? {})) {
+            headers[chave] = resolverVariaveisDeAmbiente(valor);
+        }
+
+        const opcoes: RequestInit = { method, headers };
+
+        if (config.body !== undefined && (method === "POST" || method === "PUT" || method === "PATCH")) {
+            opcoes.body = JSON.stringify(config.body);
+            if (!headers["Content-Type"] && !headers["content-type"]) {
+                headers["Content-Type"] = "application/json";
+            }
+        }
+
+        const resposta = await fetch(url, opcoes);
+        if (!resposta.ok) {
+            const corpo = await resposta.text();
+            throw new Error(`API retornou ${resposta.status} ${resposta.statusText}: ${corpo}`);
+        }
+
+        const tipoDeConteudo = resposta.headers.get("content-type") ?? "";
+        if (tipoDeConteudo.includes("application/json")) {
+            return resposta.json() as Promise<unknown>;
+        }
+        return resposta.text();
+    };
+}
+
+export type ConfiguracaoDeMcp = {
+    transport: "stdio" | "http" | "sse";
+    // stdio
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    // http / sse
+    url?: string;
+    headers?: Record<string, string>;
+    // comum
+    tool: string;
+    tool_args?: Record<string, unknown>;
+};
+
+function construirTransporteMcp(config: ConfiguracaoDeMcp) {
+    if (config.transport === "stdio") {
+        if (!config.command) {
+            throw new Error('mcp_config.command é obrigatório para transport "stdio"');
+        }
+        const envResolvido: Record<string, string> = {};
+        for (const [k, v] of Object.entries(config.env ?? {})) {
+            envResolvido[k] = resolverVariaveisDeAmbiente(v);
+        }
+        return new StdioClientTransport({
+            command: config.command,
+            args: config.args ?? [],
+            env: { ...getDefaultEnvironment(), ...envResolvido },
+        });
+    }
+
+    const urlBruta = config.url;
+    if (!urlBruta) {
+        throw new Error(`mcp_config.url é obrigatório para transport "${config.transport}"`);
+    }
+    const url = resolverVariaveisDeAmbiente(urlBruta);
+
+    const headersResolvidos: Record<string, string> = {};
+    for (const [k, v] of Object.entries(config.headers ?? {})) {
+        headersResolvidos[k] = resolverVariaveisDeAmbiente(v);
+    }
+
+    if (config.transport === "sse") {
+        // SSE legado — headers de autenticação via requestInit (usado nas requisições POST)
+        return new SSEClientTransport(new URL(url), {
+            requestInit: { headers: headersResolvidos },
+        });
+    }
+
+    return new StreamableHTTPClientTransport(new URL(url), {
+        requestInit: { headers: headersResolvidos },
+    });
+}
+
+/**
+ * Cria uma implementação de ferramenta que invoca uma tool em um servidor MCP.
+ *
+ * Suporta três tipos de transporte:
+ *  - "stdio": inicia um processo local (ex: npx @modelcontextprotocol/server-postgres)
+ *  - "http":  conecta a um servidor MCP remoto via Streamable HTTP (protocolo moderno)
+ *  - "sse":   conecta a um servidor MCP legado via Server-Sent Events
+ *
+ * Tokens e segredos ficam em variáveis de ambiente — use `${NOME_VAR}` em
+ * qualquer campo string (url, headers, env).
+ *
+ * Exemplo de declaração no toolbox:
+ *
+ * ```yaml
+ * - nome: query_postgres
+ *   descricao: Executa queries SQL no banco de dados
+ *   mcp_config:
+ *     transport: stdio
+ *     command: npx
+ *     args: ["-y", "@modelcontextprotocol/server-postgres"]
+ *     env:
+ *       DATABASE_URL: "${DATABASE_URL}"
+ *     tool: query
+ *     tool_args:
+ *       sql: "SELECT version()"
+ * ```
+ */
+type ConteudoMcp = { type: string; text?: string; [k: string]: unknown };
+type ResultadoMcp = { content: ConteudoMcp[]; isError?: boolean };
+
+export function criarChamadorDeMcp(config: ConfiguracaoDeMcp): ImplementacaoDeFerramenta {
+    return async (_contexto: ContextoDeExecucao) => {
+        const client = new Client({ name: "agent-contract", version: "1.0.0" });
+        // O Transport do SDK usa exactOptionalPropertyTypes internamente;
+        // o cast via unknown contorna a incompatibilidade de tipos opcionais
+        // entre versões do SDK sem perder segurança em tempo de execução.
+        const transport = construirTransporteMcp(config) as unknown as Parameters<typeof client.connect>[0];
+
+        try {
+            await client.connect(transport);
+            const bruto = await client.callTool({ name: config.tool, arguments: config.tool_args ?? {} });
+            const resultado = bruto as ResultadoMcp;
+
+            if (resultado.isError) {
+                const mensagem = resultado.content
+                    .filter((c): c is ConteudoMcp & { type: "text"; text: string } => c.type === "text" && typeof c.text === "string")
+                    .map((c) => c.text)
+                    .join("\n");
+                throw new Error(`MCP "${config.tool}" retornou erro: ${mensagem || "sem detalhes"}`);
+            }
+
+            const textos = resultado.content
+                .filter((c): c is ConteudoMcp & { type: "text"; text: string } => c.type === "text" && typeof c.text === "string")
+                .map((c) => c.text);
+
+            if (textos.length === 1) {
+                const texto = textos[0];
+                if (texto !== undefined) {
+                    try { return JSON.parse(texto) as unknown; } catch { return texto; }
+                }
+            }
+
+            return resultado.content;
+        } finally {
+            await client.close();
+        }
+    };
+}
 
 // Apenas as ferramentas com implementação real entram aqui. As demais do
 // toolbox.md permanecem só declarativas — o Executor reporta "não
