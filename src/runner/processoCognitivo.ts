@@ -8,7 +8,7 @@ import Planner from "./planner.js";
 import Executor from "./executor.js";
 import ModeloIA from "../agents-config/modeloIA.js";
 import { criarHandlersDoCiclo } from "./cicloHandlers.js";
-import { criarFerramentas, criarChamadorDeApi, type ImplementacaoDeFerramenta } from "../agente/ferramentas.js";
+import { criarFerramentas, criarChamadorDeApi, criarChamadorDeMcp, type ImplementacaoDeFerramenta } from "../agente/ferramentas.js";
 import { criarImplementacoesDeHooks, montarRelatorioFinal } from "../agente/hooks.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -114,12 +114,24 @@ export default class ProcessoCognitivo {
         return this;
     }
 
-    private _criarFeramentasDeApiDoToolbox(): Record<string, ImplementacaoDeFerramenta> {
+    // Varre o toolbox e cria implementações automáticas para qualquer ferramenta
+    // que declare `api_config` (chamada HTTP genérica) ou `mcp_config` (servidor MCP).
+    // Implementações manuais em criarFerramentas() sempre têm precedência.
+    private _criarFeramentasExternas(): Record<string, ImplementacaoDeFerramenta> {
         const resultado: Record<string, ImplementacaoDeFerramenta> = {};
         for (const ferramenta of this._toolboxRoot?.toolbox?.ferramentas ?? []) {
+            const nome = ferramenta?.nome as string | undefined;
+            if (!nome) continue;
+
             const apiConfig = ferramenta?.api_config;
             if (typeof apiConfig?.url === "string") {
-                resultado[ferramenta.nome as string] = criarChamadorDeApi(apiConfig);
+                resultado[nome] = criarChamadorDeApi(apiConfig);
+                continue;
+            }
+
+            const mcpConfig = ferramenta?.mcp_config;
+            if (mcpConfig?.transport && mcpConfig?.tool) {
+                resultado[nome] = criarChamadorDeMcp(mcpConfig);
             }
         }
         return resultado;
@@ -127,9 +139,9 @@ export default class ProcessoCognitivo {
 
     async execute(entrada: EntradaCiclo) {
         const modeloIA = ModeloIA.configurarModeloIA();
-        const ferramentasDeApi = this._criarFeramentasDeApiDoToolbox();
-        // Implementações manuais têm precedência sobre as geradas por api_config.
-        const ferramentas = { ...ferramentasDeApi, ...criarFerramentas(modeloIA) };
+        const ferramentasExternas = this._criarFeramentasExternas();
+        // Implementações manuais têm precedência sobre as geradas por api_config/mcp_config.
+        const ferramentas = { ...ferramentasExternas, ...criarFerramentas(modeloIA) };
         const implementacoesDeHooks = criarImplementacoesDeHooks();
 
         const loop = new Loop(this._loopRoot, criarHandlersDoCiclo(ferramentas, this._hooksRoot, implementacoesDeHooks, montarRelatorioFinal));
