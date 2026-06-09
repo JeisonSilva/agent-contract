@@ -10,6 +10,8 @@ import ModeloIA from "../agents-config/modeloIA.js";
 import { criarHandlersDoCiclo } from "./cicloHandlers.js";
 import { criarFerramentas, criarChamadorDeApi, criarChamadorDeMcp, type ImplementacaoDeFerramenta } from "../agente/ferramentas.js";
 import { criarImplementacoesDeHooks, montarRelatorioFinal } from "../agente/hooks.js";
+import { criarCheckpointer } from "../memory/checkpointer.js";
+import { VectorStoreDeAnalises } from "../memory/vectorStore.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -139,16 +141,32 @@ export default class ProcessoCognitivo {
 
     async execute(entrada: EntradaCiclo) {
         const modeloIA = ModeloIA.configurarModeloIA();
+
+        let checkpointer: Awaited<ReturnType<typeof criarCheckpointer>> | undefined;
+        let vectorStore: VectorStoreDeAnalises | undefined;
+
+        if (process.env.DATABASE_URL) {
+            try {
+                [checkpointer, vectorStore] = await Promise.all([
+                    criarCheckpointer(),
+                    VectorStoreDeAnalises.criar(),
+                ]);
+                console.log("Memória de sessão (PostgreSQL) e memória semântica (pgvector) inicializadas.");
+            } catch (erro) {
+                console.warn("Memória indisponível:", (erro as Error).message);
+            }
+        }
+
         const ferramentasExternas = this._criarFeramentasExternas();
         // Implementações manuais têm precedência sobre as geradas por api_config/mcp_config.
-        const ferramentas = { ...ferramentasExternas, ...criarFerramentas(modeloIA) };
+        const ferramentas = { ...ferramentasExternas, ...criarFerramentas(modeloIA, vectorStore) };
         const implementacoesDeHooks = criarImplementacoesDeHooks();
 
         const loop = new Loop(this._loopRoot, criarHandlersDoCiclo(ferramentas, this._hooksRoot, implementacoesDeHooks, montarRelatorioFinal));
         const planner = new Planner(this._plannerRoot, modeloIA);
         const executor = new Executor(this._executorRoot, this._toolboxRoot, ferramentas);
 
-        await loop.execute(planner, executor, this._agent, entrada);
+        await loop.execute(planner, executor, this._agent, entrada, checkpointer);
     }
 
 }

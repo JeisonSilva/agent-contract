@@ -3,6 +3,7 @@ import type Executor from "./executor.js";
 import type { ResultadoEtapa } from "./executor.js";
 import type Planner from "./planner.js";
 import type { EtapaPlano } from "./planner.js";
+import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import { Annotation, START, END, StateGraph } from "@langchain/langgraph";
 
 const state = Annotation.Root({
@@ -73,7 +74,13 @@ export default class Loop {
         return this;
     }
 
-    async execute(planner: Planner, executor: Executor, agent: Agent, entrada: EntradaCiclo) {
+    async execute(
+        planner: Planner,
+        executor: Executor,
+        agent: Agent,
+        entrada: EntradaCiclo,
+        checkpointer?: BaseCheckpointSaver
+    ) {
         const contexto: ContextoCiclo = { planner, executor, agent, entrada };
         const etapas: string[] = this._loopRoot?.loop?.ciclo ?? [];
 
@@ -96,8 +103,10 @@ export default class Loop {
         }
         grafo.addEdge(etapaAnterior as any, END);
 
-        const app = grafo.compile();
-        const resultado = await app.invoke({ mensagens: [] });
+        const app = checkpointer ? grafo.compile({ checkpointer }) : grafo.compile();
+        const threadId = _normalizarThreadId(entrada.caminhoDoProjeto);
+        const config = checkpointer ? { configurable: { thread_id: threadId } } : undefined;
+        const resultado = await app.invoke({ mensagens: [] }, config);
         console.log("Resultado final do Loop:", resultado);
         return resultado;
     }
@@ -108,4 +117,8 @@ export default class Loop {
             return {};
         };
     }
+}
+
+function _normalizarThreadId(caminho: string): string {
+    return caminho.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 128);
 }

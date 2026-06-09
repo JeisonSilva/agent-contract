@@ -210,6 +210,16 @@ toolbox:
         - commits: object[]
       retorno: Lista de arquivos/pacotes alterados pelo autor no período analisado
 
+    - nome: buscar_analises_similares
+      descricao: Busca na memória semântica (pgvector) análises de projetos anteriores semanticamente similares ao projeto atual, usando o domínio identificado como consulta. Útil para contextualizar a análise com experiências passadas de projetos parecidos. Só disponível quando DATABASE_URL está configurada.
+      parametros: []
+      retorno: Lista de até 3 análises anteriores similares, com caminho do projeto, conteúdo resumido e score de similaridade
+
+    - nome: salvar_analise_em_memoria
+      descricao: Persiste os resultados completos da análise atual na memória semântica (pgvector) para consultas futuras. Deve ser invocada como última etapa do plano, após todas as ferramentas de coleta terem sido executadas. Só disponível quando DATABASE_URL está configurada.
+      parametros: []
+      retorno: ID único da análise salva e confirmação de persistência
+
   regras:
     - Cada ferramenta deve ter nome único dentro do toolbox
     - Parâmetros ausentes ou inválidos devem ser rejeitados antes da chamada real
