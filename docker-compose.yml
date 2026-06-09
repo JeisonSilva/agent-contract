@@ -1,0 +1,50 @@
+services:
+
+  # ──────────────────────────────────────────────
+  # Agente (CLI — executa sob demanda com profiles)
+  # Uso: docker compose run --rm app /projetos/<nome-do-projeto>
+  # ──────────────────────────────────────────────
+  app:
+    build: .
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://agent:agent@postgres:5432/agent_memory
+    volumes:
+      - ./projetos:/projetos        # projetos a analisar
+      - ./resultados:/app/resultados # relatórios gerados
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - agent-net
+
+  # ──────────────────────────────────────────────
+  # PostgreSQL + pgvector
+  # Sobe automaticamente com: docker compose up -d
+  # ──────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent
+      POSTGRES_DB: agent_memory
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agent_memory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agent-net
+
+networks:
+  agent-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
