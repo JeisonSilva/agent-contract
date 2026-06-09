@@ -24,7 +24,9 @@ export default class Executor {
     }
 
     listarFerramentasDisponiveis(): Array<{ nome: string; descricao: string }> {
-        return (this._toolboxRoot?.toolbox?.ferramentas ?? []).map((f: any) => ({ nome: f.nome, descricao: f.descricao }));
+        return (this._toolboxRoot?.toolbox?.ferramentas ?? [])
+            .filter((f: any) => f?.nome && this._ferramentas[f.nome] !== undefined)
+            .map((f: any) => ({ nome: f.nome, descricao: f.descricao }));
     }
 
     async executarEtapa(etapa: EtapaPlano, contexto: ContextoDeExecucao): Promise<ResultadoEtapa> {
@@ -34,7 +36,7 @@ export default class Executor {
         if (!ferramentaDeclarada) {
             return {
                 status: "falha",
-                observacoes: `Nenhuma ferramenta "${etapa.acao}" encontrada no toolbox; etapa não executada.`,
+                observacoes: `Ferramenta "${etapa.acao}" não encontrada no toolbox; etapa não executada.`,
             };
         }
 
@@ -42,7 +44,7 @@ export default class Executor {
         if (!implementacao) {
             return {
                 status: "falha",
-                observacoes: `Ferramenta "${ferramentaDeclarada.nome}" está catalogada no toolbox mas ainda não tem implementação real.`,
+                observacoes: `Ferramenta "${ferramentaDeclarada.nome}" não encontrada na arquitetura do agente; implemente-a em src/agente/ferramentas.ts para disponibilizá-la.`,
             };
         }
 
