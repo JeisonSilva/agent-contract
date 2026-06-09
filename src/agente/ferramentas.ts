@@ -283,7 +283,74 @@ async function listarArquivosAlteradosPorAutor(contexto: ContextoDeExecucao) {
     return { arquivos_por_desenvolvedor: arquivosPorDesenvolvedor };
 }
 
-export type ImplementacaoDeFerramenta = (contexto: ContextoDeExecucao) => Promise<any>;
+export type ImplementacaoDeFerramenta = (contexto: ContextoDeExecucao) => Promise<unknown>;
+
+export type ConfiguracaoDeApi = {
+    url: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+};
+
+function resolverVariaveisDeAmbiente(texto: string): string {
+    return texto.replace(/\$\{(\w+)\}/g, (_, nome: string) => process.env[nome] ?? "");
+}
+
+/**
+ * Cria uma implementação de ferramenta que chama um endpoint HTTP.
+ *
+ * Valores como `${MINHA_VAR}` na url e nos headers são substituídos por
+ * variáveis de ambiente em tempo de execução, permitindo manter tokens
+ * e segredos fora do contrato YAML.
+ *
+ * Para declarar a ferramenta no toolbox basta adicionar o campo `api_config`:
+ *
+ * ```yaml
+ * - nome: buscar_usuarios
+ *   descricao: Retorna lista de usuários da API de gestão
+ *   api_config:
+ *     url: https://api.exemplo.com/usuarios
+ *     method: GET
+ *     headers:
+ *       Authorization: "Bearer ${API_TOKEN}"
+ *       Accept: application/json
+ * ```
+ *
+ * O runner detecta `api_config` automaticamente e wires a implementação —
+ * nenhuma linha de TypeScript precisa ser adicionada.
+ */
+export function criarChamadorDeApi(config: ConfiguracaoDeApi): ImplementacaoDeFerramenta {
+    return async (_contexto: ContextoDeExecucao) => {
+        const url = resolverVariaveisDeAmbiente(config.url);
+        const method = (config.method ?? "GET").toUpperCase();
+
+        const headers: Record<string, string> = {};
+        for (const [chave, valor] of Object.entries(config.headers ?? {})) {
+            headers[chave] = resolverVariaveisDeAmbiente(valor);
+        }
+
+        const opcoes: RequestInit = { method, headers };
+
+        if (config.body !== undefined && (method === "POST" || method === "PUT" || method === "PATCH")) {
+            opcoes.body = JSON.stringify(config.body);
+            if (!headers["Content-Type"] && !headers["content-type"]) {
+                headers["Content-Type"] = "application/json";
+            }
+        }
+
+        const resposta = await fetch(url, opcoes);
+        if (!resposta.ok) {
+            const corpo = await resposta.text();
+            throw new Error(`API retornou ${resposta.status} ${resposta.statusText}: ${corpo}`);
+        }
+
+        const tipoDeConteudo = resposta.headers.get("content-type") ?? "";
+        if (tipoDeConteudo.includes("application/json")) {
+            return resposta.json() as Promise<unknown>;
+        }
+        return resposta.text();
+    };
+}
 
 // Apenas as ferramentas com implementação real entram aqui. As demais do
 // toolbox.md permanecem só declarativas — o Executor reporta "não

@@ -13,6 +13,65 @@ consulta) com uma interface bem definida.
    correspondem ao schema declarado em `parametros`.
 4. Nunca permitir que o executor chame uma ferramenta que não esteja catalogada aqui.
 
+## Ferramentas de API (api_config)
+
+Qualquer ferramenta pode declarar o campo `api_config` para ser implementada
+automaticamente pelo runner, sem precisar de código TypeScript adicional.
+
+O runner detecta `api_config.url` e cria uma implementação genérica que:
+- Faz a requisição HTTP com o `method` e `headers` configurados.
+- Substitui `${NOME_VAR}` na url e nos headers pelo valor da variável de ambiente
+  correspondente — ideal para tokens e segredos.
+- Retorna o corpo da resposta como JSON (ou texto se o Content-Type não for JSON).
+- Lança erro com status HTTP quando a resposta não for bem-sucedida.
+
+**Mesma ferramenta, múltiplas APIs:** declare quantas entradas quiser no toolbox,
+cada uma com `api_config` apontando para endpoints diferentes. O runner cria uma
+implementação independente para cada declaração.
+
+**Campos suportados em `api_config`:**
+
+| Campo     | Tipo                        | Obrigatório | Descrição                               |
+|-----------|-----------------------------|-------------|-----------------------------------------|
+| `url`     | string                      | sim         | Endpoint completo; aceita `${VAR}`      |
+| `method`  | string                      | não         | Método HTTP (padrão: GET)               |
+| `headers` | map<string, string>         | não         | Cabeçalhos; valores aceitam `${VAR}`    |
+| `body`    | qualquer valor JSON         | não         | Corpo para POST/PUT/PATCH               |
+
+**Exemplo de declaração no toolbox:**
+
+```yaml
+# Tool sem autenticação
+- nome: listar_repositorios_publicos
+  descricao: Lista repositórios públicos de uma organização no GitHub
+  api_config:
+    url: https://api.github.com/orgs/minha-org/repos
+    method: GET
+    headers:
+      Accept: application/vnd.github+json
+
+# Tool com token via variável de ambiente
+- nome: buscar_usuario_interno
+  descricao: Busca dados de um colaborador na API interna de RH
+  api_config:
+    url: https://rh.empresa.com/api/colaboradores
+    method: GET
+    headers:
+      Authorization: "Bearer ${RH_API_TOKEN}"
+      Accept: application/json
+
+# Tool de escrita (POST) com body estático
+- nome: notificar_catalogacao
+  descricao: Envia notificação de conclusão de catalogação para o webhook do time
+  api_config:
+    url: https://hooks.empresa.com/catalogacao
+    method: POST
+    headers:
+      X-API-Key: "${WEBHOOK_KEY}"
+    body:
+      evento: catalogacao_concluida
+```
+
 ## Estrutura esperada
 
 ```yaml
