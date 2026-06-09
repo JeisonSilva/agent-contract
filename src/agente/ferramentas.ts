@@ -3,6 +3,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import type { ContextoDeExecucao } from "../runner/executor.js";
 import type ModeloIA from "../agents-config/modeloIA.js";
+import type { VectorStoreDeAnalises } from "../memory/vectorStore.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -478,15 +479,57 @@ export function criarChamadorDeMcp(config: ConfiguracaoDeMcp): ImplementacaoDeFe
     };
 }
 
+// Salva os resultados acumulados da análise atual na memória semântica (pgvector).
+// Deve ser a última etapa do plano para capturar todos os dados coletados.
+function criarSalvadorDeAnalise(vectorStore: VectorStoreDeAnalises): ImplementacaoDeFerramenta {
+    return async (contexto: ContextoDeExecucao) => {
+        const conteudo = JSON.stringify(contexto.resultadosAnteriores, null, 2);
+        const metadata: Record<string, unknown> = {
+            caminhoProjeto: contexto.caminhoDoProjeto,
+            timestamp: new Date().toISOString(),
+        };
+        const id = await vectorStore.salvar(contexto.caminhoDoProjeto, conteudo, metadata);
+        return { id, mensagem: `Análise persistida na memória semântica com ID ${id}.` };
+    };
+}
+
+// Busca análises semanticamente similares à análise atual no pgvector.
+// Usa o domínio identificado como consulta quando disponível; caso contrário,
+// usa o caminho do projeto como fallback para a busca por similaridade.
+function criarBuscadorDeAnalises(vectorStore: VectorStoreDeAnalises): ImplementacaoDeFerramenta {
+    return async (contexto: ContextoDeExecucao) => {
+        const dominioResultado = contexto.resultadosAnteriores["identificar_dominio_do_projeto"] as {
+            dominio?: string; justificativa_dominio?: string
+        } | undefined;
+
+        const consulta = dominioResultado?.dominio
+            ? `${dominioResultado.dominio} ${dominioResultado.justificativa_dominio ?? ""}`
+            : contexto.caminhoDoProjeto;
+
+        const analises = await vectorStore.buscarSimilares(consulta, 3);
+        return { analises_similares: analises };
+    };
+}
+
 // Apenas as ferramentas com implementação real entram aqui. As demais do
 // toolbox.md permanecem só declarativas — o Executor reporta "não
 // implementada" para elas, em vez de inventar um resultado.
-export function criarFerramentas(modeloIA: ModeloIA): Record<string, ImplementacaoDeFerramenta> {
-    return {
+// Quando `vectorStore` é fornecido, as ferramentas de memória semântica são
+// registradas; caso contrário, ficam ausentes e o Executor as ignora com falha
+// informativa — o agente continua funcionando sem banco configurado.
+export function criarFerramentas(modeloIA: ModeloIA, vectorStore?: VectorStoreDeAnalises): Record<string, ImplementacaoDeFerramenta> {
+    const base: Record<string, ImplementacaoDeFerramenta> = {
         ler_manifesto_de_dependencias: lerManifestoDeDependencias,
         identificar_dominio_do_projeto: criarIdentificadorDeDominioDoProjeto(modeloIA),
         listar_commits_por_periodo: listarCommitsPorPeriodo,
         identificar_desenvolvedores_ativos: identificarDesenvolvedoresAtivos,
         listar_arquivos_alterados_por_autor: listarArquivosAlteradosPorAutor,
     };
+
+    if (vectorStore) {
+        base.salvar_analise_em_memoria = criarSalvadorDeAnalise(vectorStore);
+        base.buscar_analises_similares = criarBuscadorDeAnalises(vectorStore);
+    }
+
+    return base;
 }
